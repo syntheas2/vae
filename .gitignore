@@ -1,0 +1,8 @@
+.vscode
+__pycache__
+*.csv
+*.pt
+*.npy
+mlruns
+.env
+*.egg-info
