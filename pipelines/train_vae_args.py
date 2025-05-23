@@ -17,7 +17,7 @@ class VAEArgs(BaseModel):
     # Training Hyperparameters
     learning_rate: float = 1e-3 # LR
     weight_decay: float = 0.0   # WD
-    num_epochs: int = 540 # Example: make this configurable, was 1 in snippet
+    num_epochs: int = 580 # Example: make this configurable, was 1 in snippet
     max_beta: float = 0.01
     min_beta: float = 1e-5
     lambd_beta_decay: float = 0.99 # 'lambd' in your code for beta decay
@@ -27,9 +27,9 @@ class VAEArgs(BaseModel):
 
     # MLflow
     mlflow_experiment_name: str = "VAE_Training_Experiment"
-    load_ckp_from_run_id: str = "90c6ef65488e4abf901730a12da87e09"
+    load_ckp_from_run_id: str = "94356be5f3924963a84ec2333ff7aea8"
     manual_bestmodel_subdir: str = "model_best"
-    bestmodels_runid: str | None = None
+    bestmodels_runid: str | None = "94356be5f3924963a84ec2333ff7aea8"
     load_from_checkpoint: bool = True
     max_checkpoints_to_keep: int = 5
     checkpoint_save_interval: int = 20

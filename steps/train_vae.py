@@ -14,12 +14,12 @@ import numpy as np
 from pathlib import Path
 import os
 from zenml import register_artifact
-from pythelpers.ml.mlflow import load_latest_checkpoint_from_mlflow, rotate_checkpoints, remove_all_from_artifact_dir, rotate_bestmodels
+from pythelpers.ml.mlflow import load_latest_checkpoint2, load_best_model, rotate_checkpoints, remove_all_from_artifact_dir, rotate_bestmodels
 import tempfile # For temporary file handling
 
 # Assuming these are correctly importable from your project structure
-from vae.model import Model_VAE , Encoder_model, Decoder_model
-from vae.main import compute_loss # Assuming this is your loss function
+from vae_syntheas.model import Model_VAE , Encoder_model, Decoder_model
+from vae_syntheas.main import compute_loss # Assuming this is your loss function
 from utils_train import TabularDataset # Ensure this is findable
 from pipelines.train_vae_args import VAEArgs # Your configuration class
 
@@ -102,7 +102,7 @@ def train_evaluate_vae(
         ckp_run_id = config.load_ckp_from_run_id
         if ckp_run_id:
             logger.info(f"Attempting to load checkpoint from MLflow run '{ckp_run_id}', subdir '{manual_checkpoint_subdir}'...")
-            checkpoint_data = load_latest_checkpoint_from_mlflow(
+            checkpoint_data = load_latest_checkpoint2(
                 run_id=ckp_run_id,
                 artifact_subdir=manual_checkpoint_subdir,
                 model=model,
@@ -115,13 +115,15 @@ def train_evaluate_vae(
                 best_val_loss = checkpoint_data.get('best_val_loss', float('inf'))
                 current_patience = checkpoint_data.get('current_patience', 0)
                 beta = checkpoint_data.get('beta', config.max_beta)
-                best_model_data_to_save = {
-                    'epoch': start_epoch,
-                    'model_state_dict': model.state_dict(),
-                    'validation_loss': best_val_loss,
-                }
-                # Model, optimizer, scheduler states are loaded by the helper
                 logger.info(f"Successfully loaded checkpoint. Resuming training from epoch {start_epoch}.")
+                best_model_data_to_save = load_best_model(
+                    run_id=config.bestmodels_runid,
+                    artifact_subdir=config.manual_bestmodel_subdir,
+                    metric='loss',
+                    device=config.device
+                )
+                logger.info(f"Successfully loaded best model")
+                # Model, optimizer, scheduler states are loaded by the helper
             else:
                 logger.info("No suitable checkpoint found. Starting training from scratch.")
         else:

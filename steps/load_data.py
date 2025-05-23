@@ -1,4 +1,4 @@
-import __init__ # noqa: F401
+import _init # noqa: F401
 from scipy.sparse import csr_matrix
 from typing import Tuple, Annotated
 import pandas as pd
@@ -10,7 +10,7 @@ from utils import get_args
 # at first try train tabsyn
 from pathlib import Path
 import numpy as np
-from vae.main import transform_preprocessed_data
+from vae_syntheas.main import transform_preprocessed_data
 
 
 

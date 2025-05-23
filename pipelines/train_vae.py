@@ -1,4 +1,4 @@
-import __init__ # noqa: F401
+import _init # noqa: F401
 from zenml import pipeline
 import mlflow  # Import the mlflow library
 from datetime import datetime # For the run description
