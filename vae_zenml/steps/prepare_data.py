@@ -1,4 +1,4 @@
-import __init__
+import _init
 from typing import Tuple
 import torch
 import numpy as np

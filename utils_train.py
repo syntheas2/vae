@@ -1,7 +1,7 @@
 import numpy as np
 import os
 
-import src
+import src._init as src
 from torch.utils.data import Dataset
 
 

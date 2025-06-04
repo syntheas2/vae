@@ -1,4 +1,4 @@
-import __init__ # Your local package structure if needed
+import _init # Your local package structure if needed
 from typing import List, Dict, Any, Tuple, Annotated
 import torch
 from torch.utils.data import DataLoader
@@ -284,8 +284,8 @@ def train_evaluate_vae(
     mlflow.log_metric("total_training_time_min", training_duration_min)
     mlflow.log_metric("final_best_validation_loss", best_val_loss)
 
+    model_to_extract_parts_from = model
     if best_model_data_to_save:
-        model_to_extract_parts_from = model
         model_to_extract_parts_from.load_state_dict(best_model_data_to_save['model_state_dict'])
         # Assuming your Model_VAE has 'encoder' and 'decoder' attributes
         # If not, you need to adapt how you get these state_dicts.

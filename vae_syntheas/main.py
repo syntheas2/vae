@@ -4,12 +4,12 @@ import torch.nn as nn
 import argparse
 import warnings
 import numpy as np
-
+import pandas as pd
 
 
 warnings.filterwarnings('ignore')
 
-def transform_preprocessed_data(train_df, test_df):
+def transform_preprocessed_data(train_df, test_df, inverse=False):
     """
     Load preprocessed CSV files and format them to match the output of the preprocess function.
     
@@ -23,30 +23,36 @@ def transform_preprocessed_data(train_df, test_df):
             - categories is a list of sizes for each categorical variable
             - d_numerical is the number of numerical features
     """
-    # Remove excluded columns only (keep the target 'impact')
-    if 'combined_tks' in train_df.columns:
-        train_df = train_df.drop(columns=['combined_tks', 'id'])
-        test_df = test_df.drop(columns=['combined_tks', 'id'])
+    # Remove excluded columns
+    excluded_cols = ['combined_tks', 'id']
+    for col in excluded_cols:
+        if col in train_df.columns:
+            train_df = train_df.drop(columns=[col])
+            test_df = test_df.drop(columns=[col])
     
-     # Identify numerical and categorical columns
+    # Identify columns after exclusion
     all_columns = train_df.columns.tolist()
     
-    # Group categorical columns by their prefix to identify the categorical features
+    # Group categorical columns by their prefix
     category_prefixes = ['category_', 'sub_category1_', 'sub_category2_', 'ticket_type_', 'business_service_']
     
-    # Dictionary to store grouped categorical columns
-    categorical_groups = {}
+    # Store column metadata for custom transformations
+    column_metadata = {
+        'categorical_groups': [],
+        'numerical_columns': [],
+        'target_column': 'impact' if 'impact' in all_columns else None
+    }
     
-    # Group the categorical columns by their prefix
+    # Identify categorical columns and group them
     for prefix in category_prefixes:
         cols = [col for col in all_columns if col.startswith(prefix)]
         if cols:
-            prefix_clean = prefix.rstrip('_')  # Remove trailing underscore
-            categorical_groups[prefix_clean] = sorted(cols)
+            prefix_clean = prefix.rstrip('_')
+            column_metadata['categorical_groups'].append((prefix_clean, sorted(cols)))
     
-    # All other columns except combined_tks are considered numerical
-    num_cols = [col for col in all_columns if not any(col.startswith(prefix) for prefix in category_prefixes) 
-                and col != 'combined_tks']
+    # Identify numerical columns (all columns that aren't categorical)
+    num_cols = [col for col in all_columns if not any(col.startswith(prefix) for prefix in category_prefixes)]
+    column_metadata['numerical_columns'] = num_cols
     
     # Extract numerical features
     X_train_num = train_df[num_cols].values
@@ -57,18 +63,16 @@ def transform_preprocessed_data(train_df, test_df):
     X_test_cat_indices = []
     categories = []
     
-    for group_name, group_cols in categorical_groups.items():
+    for group_name, group_cols in column_metadata['categorical_groups']:
         # Extract one-hot encoded columns for this group
         train_group = train_df[group_cols].values
         test_group = test_df[group_cols].values
         
         # Convert one-hot encoding to indices (argmax)
-        # If a row is all zeros, we'll use the last category as default
         train_indices = np.argmax(train_group, axis=1)
         test_indices = np.argmax(test_group, axis=1)
         
-        # Handle case where all values in a row are 0 (no category selected)
-        # Set to a special index (num_categories)
+        # Handle all-zero rows
         all_zeros_train = (train_group.sum(axis=1) == 0)
         all_zeros_test = (test_group.sum(axis=1) == 0)
         
@@ -91,8 +95,42 @@ def transform_preprocessed_data(train_df, test_df):
     # Number of numerical features
     d_numerical = X_train_num.shape[1]
     
-    # Return in the same format as preprocess
-    return (X_train_num, X_test_num), (X_train_cat, X_test_cat), categories, d_numerical
+    # Create inverse transformation functions if required
+    if inverse:
+        # Create numerical inverse transformation (identity function)
+        def num_inverse(numerical_data):
+            """Identity transform for numerical data"""
+            return numerical_data
+        
+        # Create categorical inverse transformation function that operates on raw indices
+        def cat_inverse(categorical_indices):
+            """Transform categorical indices back to one-hot encoding"""
+            batch_size = categorical_indices.shape[0]
+            result = {}
+            
+            # Process each categorical group
+            for group_idx, (group_name, group_cols) in enumerate(column_metadata['categorical_groups']):
+                # Get indices for this group
+                indices = categorical_indices[:, group_idx].astype(int)
+                
+                # Create one-hot encoding for this group
+                one_hot = np.zeros((batch_size, len(group_cols)))
+                
+                # Set 1s for valid indices (less than number of columns)
+                for row_idx, col_idx in enumerate(indices):
+                    if col_idx < len(group_cols):
+                        one_hot[row_idx, col_idx] = 1.0
+                
+                # Store one-hot encoding with column names
+                for col_idx, col_name in enumerate(group_cols):
+                    result[col_name] = one_hot[:, col_idx]
+            
+            # Return the categorical data in DataFrame format
+            return pd.DataFrame(result)
+        
+        return (X_train_num, X_test_num), (X_train_cat, X_test_cat), categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata
+    else:
+        return (X_train_num, X_test_num), (X_train_cat, X_test_cat), categories, d_numerical
 
 
 
