@@ -33,6 +33,7 @@ def transform_preprocessed_data(train_df, test_df, inverse=False):
     # Identify columns after exclusion
     all_columns = train_df.columns.tolist()
     
+    
     # Group categorical columns by their prefix
     category_prefixes = ['category_', 'sub_category1_', 'sub_category2_', 'ticket_type_', 'business_service_']
     

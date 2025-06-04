@@ -17,7 +17,7 @@ def train_vae_pipeline():
     now = datetime.now() # Use current time for uniqueness
     timestamp_str = now.strftime("%Y-%m-%d_%H-%M-%S-%f")[:-3]
     mlflow.set_experiment(args.mlflow_experiment_name)
-    mlflow.set_tag("mlflow.runName", f"{args.mlflow_experiment_name}_{timestamp_str}")
+    mlflow.set_tag("mlflow.runName", f"{args.mlflow_run_name}_{timestamp_str}")
     if not args.bestmodels_runid:
         args.bestmodels_runid = mlflow.active_run().info.run_id
     
@@ -36,7 +36,7 @@ def train_vae_pipeline():
     )
 
     # Step 2: Train and evaluate the VAE model
-    return train_evaluate_vae(
+    model_to_extract_parts_from, pre_encoder, pre_decoder, train_z = train_evaluate_vae(
         X_train_num=X_train_num_pt,
         X_train_cat=X_train_cat_pt,
         X_val_num=X_val_num_pt,
@@ -45,6 +45,8 @@ def train_vae_pipeline():
         categories=categories,
         config=args
     )
+
+    return model_to_extract_parts_from, pre_encoder, pre_decoder, train_z
 
 
 if __name__ == "__main__":

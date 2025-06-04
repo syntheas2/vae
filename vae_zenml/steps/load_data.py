@@ -11,6 +11,7 @@ from utils import get_args
 from pathlib import Path
 import numpy as np
 from vae_syntheas.main import transform_preprocessed_data
+from syntheas_zenml_mgmt.data import get_df_test, get_df_train, get_df_val
 
 
 
@@ -25,13 +26,10 @@ def load_data_step() -> Tuple[
     Annotated[Any, "all_columns"],
     Annotated[Any, "column_metadata"],
 ]:
-    artifact = Client().get_artifact_version(
-        "b399655a-01d4-47a0-9c1d-92ef258a0023")
-    df_train = artifact.load()
-
-    artifact2 = Client().get_artifact_version(
-        "c5f0a53c-939b-4ddd-a68f-e58756dc864a")
-    df_val = artifact2.load()
+    df_train = get_df_train()
+    df_train.impact = df_train.impact.astype(int)
+    df_val = get_df_val()
+    df_val.impact = df_val.impact.astype(int)
 
     X_num, X_cat, categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata = transform_preprocessed_data(df_train, df_val, inverse=True)
 
