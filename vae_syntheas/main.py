@@ -9,126 +9,108 @@ import pandas as pd
 
 warnings.filterwarnings('ignore')
 
-def transform_preprocessed_data(train_df, test_df, inverse=False):
+def transform_preprocessed_data(train_df, test_df, metadata, excluded_cols, inverse=False):
     """
-    Load preprocessed CSV files and format them to match the output of the preprocess function.
-    
+    Transform dataframes with non-one-hot categorical columns into a format suitable for modeling.
+    Uses metadata to infer categorical and numerical columns.
+
     Args:
-        task_type (str): Type of task ('binclass', 'multiclass', or 'regression')
-        
+        train_df (pd.DataFrame): Training dataframe.
+        test_df (pd.DataFrame): Test dataframe.
+        metadata (dict): Metadata describing columns (type, unique values, etc).
+        inverse (bool): Whether to return inverse transformation functions.
+
     Returns:
-        tuple: (X_num, X_cat, categories, d_numerical) where:
-            - X_num is a tuple of (train_numerical_features, test_numerical_features)
-            - X_cat is a tuple of (train_categorical_features, test_categorical_features)
-            - categories is a list of sizes for each categorical variable
-            - d_numerical is the number of numerical features
+        (X_num, X_cat, categories, d_numerical) or (+inverse funcs, all_columns, column_metadata)
     """
     # Remove excluded columns
-    excluded_cols = ['combined_tks', 'id']
-    for col in excluded_cols:
-        if col in train_df.columns:
-            train_df = train_df.drop(columns=[col])
-            test_df = test_df.drop(columns=[col])
+    train_df = train_df.drop(columns=[col for col in excluded_cols if col in train_df.columns], errors='ignore')
+    test_df  = test_df.drop(columns=[col for col in excluded_cols if col in test_df.columns], errors='ignore')
     
-    # Identify columns after exclusion
-    all_columns = train_df.columns.tolist()
-    
-    
-    # Group categorical columns by their prefix
-    category_prefixes = ['category_', 'sub_category1_', 'sub_category2_', 'ticket_type_', 'business_service_']
-    
-    # Store column metadata for custom transformations
-    column_metadata = {
-        'categorical_groups': [],
-        'numerical_columns': [],
-        'target_column': 'impact' if 'impact' in all_columns else None
-    }
-    
-    # Identify categorical columns and group them
-    for prefix in category_prefixes:
-        cols = [col for col in all_columns if col.startswith(prefix)]
-        if cols:
-            prefix_clean = prefix.rstrip('_')
-            column_metadata['categorical_groups'].append((prefix_clean, sorted(cols)))
-    
-    # Identify numerical columns (all columns that aren't categorical)
-    num_cols = [col for col in all_columns if not any(col.startswith(prefix) for prefix in category_prefixes)]
-    column_metadata['numerical_columns'] = num_cols
-    
+    # Use metadata to extract categorical and numerical columns
+    categorical_columns = []
+    numerical_columns = []
+
+    for col_meta in metadata['columns']:
+        col_name = col_meta['name']
+        if col_name in excluded_cols:
+            continue
+        if col_meta.get('type') == 'categorical':
+            categorical_columns.append(col_name)
+        elif col_meta.get('type') in ('float', 'int', 'numeric', 'number'):
+            numerical_columns.append(col_name)
+        else:
+            # fallback: treat as numerical if dtype is numeric, otherwise skip
+            if pd.api.types.is_numeric_dtype(train_df[col_name]):
+                numerical_columns.append(col_name)
+
     # Extract numerical features
-    X_train_num = train_df[num_cols].values
-    X_test_num = test_df[num_cols].values
+    X_train_num = train_df[numerical_columns].values.astype(np.float32) if numerical_columns else np.empty((train_df.shape[0], 0))
+    X_test_num  = test_df[numerical_columns].values.astype(np.float32) if numerical_columns else np.empty((test_df.shape[0], 0))
     
-    # Process categorical features - convert one-hot encoding to indices
+    # Extract categorical features as indices
     X_train_cat_indices = []
     X_test_cat_indices = []
     categories = []
-    
-    for group_name, group_cols in column_metadata['categorical_groups']:
-        # Extract one-hot encoded columns for this group
-        train_group = train_df[group_cols].values
-        test_group = test_df[group_cols].values
-        
-        # Convert one-hot encoding to indices (argmax)
-        train_indices = np.argmax(train_group, axis=1)
-        test_indices = np.argmax(test_group, axis=1)
-        
-        # Handle all-zero rows
-        all_zeros_train = (train_group.sum(axis=1) == 0)
-        all_zeros_test = (test_group.sum(axis=1) == 0)
-        
-        if np.any(all_zeros_train) or np.any(all_zeros_test):
-            # Add an extra category for "none selected"
-            num_categories = len(group_cols) + 1
-            train_indices[all_zeros_train] = len(group_cols)
-            test_indices[all_zeros_test] = len(group_cols)
-        else:
-            num_categories = len(group_cols)
-        
-        X_train_cat_indices.append(train_indices)
-        X_test_cat_indices.append(test_indices)
-        categories.append(num_categories)
-    
-    # Stack all categorical features into a single matrix
-    X_train_cat = np.column_stack(X_train_cat_indices) if X_train_cat_indices else np.empty((len(X_train_num), 0), dtype=np.int64)
-    X_test_cat = np.column_stack(X_test_cat_indices) if X_test_cat_indices else np.empty((len(X_test_num), 0), dtype=np.int64)
-    
-    # Number of numerical features
+    cat_value_maps = {}  # map col_name -> [class0, class1, ...] for inverse
+
+    for col_meta in metadata['columns']:
+        col_name = col_meta['name']
+        if col_name in categorical_columns:
+            unique_values = col_meta.get('unique_values')
+            if unique_values is None:
+                # fallback: compute from train/test
+                unique_values = sorted(pd.concat([train_df[col_name], test_df[col_name]]).dropna().unique())
+            # Map to indices
+            value_to_idx = {val: idx for idx, val in enumerate(unique_values)}
+            idx_to_value = {idx: val for idx, val in enumerate(unique_values)}
+            cat_value_maps[col_name] = idx_to_value
+            # Map train and test
+            train_indices = train_df[col_name].map(value_to_idx).fillna(-1).astype(int).values
+            test_indices  = test_df[col_name].map(value_to_idx).fillna(-1).astype(int).values
+
+            n_cat = len(unique_values)
+            categories.append(n_cat)
+            X_train_cat_indices.append(train_indices)
+            X_test_cat_indices.append(test_indices)
+
+    if X_train_cat_indices:
+        X_train_cat = np.column_stack(X_train_cat_indices)
+        X_test_cat  = np.column_stack(X_test_cat_indices)
+    else:
+        X_train_cat = np.empty((len(X_train_num), 0), dtype=np.int64)
+        X_test_cat  = np.empty((len(X_test_num), 0), dtype=np.int64)
+
     d_numerical = X_train_num.shape[1]
-    
-    # Create inverse transformation functions if required
+
+    # Build metadata for inverse
+    column_metadata = {
+        'categorical_columns': categorical_columns,
+        'numerical_columns': numerical_columns,
+        'cat_value_maps': cat_value_maps,
+    }
+    all_columns = train_df.columns.tolist()
+
     if inverse:
-        # Create numerical inverse transformation (identity function)
+        # Identity for numericals
         def num_inverse(numerical_data):
             """Identity transform for numerical data"""
             return numerical_data
-        
-        # Create categorical inverse transformation function that operates on raw indices
+
+        # Inverse for categoricals: indices -> dataframe with original values
         def cat_inverse(categorical_indices):
-            """Transform categorical indices back to one-hot encoding"""
-            batch_size = categorical_indices.shape[0]
+            """
+            categorical_indices: np.ndarray of shape [batch, n_cat_cols]
+            Returns pd.DataFrame with original column names and values
+            """
             result = {}
-            
-            # Process each categorical group
-            for group_idx, (group_name, group_cols) in enumerate(column_metadata['categorical_groups']):
-                # Get indices for this group
-                indices = categorical_indices[:, group_idx].astype(int)
-                
-                # Create one-hot encoding for this group
-                one_hot = np.zeros((batch_size, len(group_cols)))
-                
-                # Set 1s for valid indices (less than number of columns)
-                for row_idx, col_idx in enumerate(indices):
-                    if col_idx < len(group_cols):
-                        one_hot[row_idx, col_idx] = 1.0
-                
-                # Store one-hot encoding with column names
-                for col_idx, col_name in enumerate(group_cols):
-                    result[col_name] = one_hot[:, col_idx]
-            
-            # Return the categorical data in DataFrame format
+            for i, col_name in enumerate(categorical_columns):
+                idx_to_value = cat_value_maps[col_name]
+                arr = categorical_indices[:, i]
+                # If index is last (unseen/missing), set to np.nan or a special value
+                result[col_name] = [idx_to_value.get(idx, np.nan) for idx in arr]
             return pd.DataFrame(result)
-        
+
         return (X_train_num, X_test_num), (X_train_cat, X_test_cat), categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata
     else:
         return (X_train_num, X_test_num), (X_train_cat, X_test_cat), categories, d_numerical
@@ -138,14 +120,18 @@ def transform_preprocessed_data(train_df, test_df, inverse=False):
 
 def compute_loss(X_num, X_cat, Recon_X_num, Recon_X_cat, mu_z, logvar_z):
     ce_loss_fn = nn.CrossEntropyLoss()
-    mse_loss = (X_num - Recon_X_num).pow(2).mean()
+    if len(X_num[0]) > 0:
+        num_mse_loss = (X_num - Recon_X_num).pow(2).mean()
+    else:
+        num_mse_loss = torch.tensor(0)
+
     ce_loss = 0
     acc = 0
     total_num = 0
 
     for idx, x_cat in enumerate(Recon_X_cat):
         if x_cat is not None:
-            ce_loss += ce_loss_fn(x_cat, X_cat[:, idx])
+            ce_loss += ce_loss_fn(x_cat, X_cat[:, idx].long())
             x_hat = x_cat.argmax(dim = -1)
         acc += (x_hat == X_cat[:,idx]).float().sum()
         total_num += x_hat.shape[0]
@@ -157,7 +143,7 @@ def compute_loss(X_num, X_cat, Recon_X_num, Recon_X_cat, mu_z, logvar_z):
     temp = 1 + logvar_z - mu_z.pow(2) - logvar_z.exp()
 
     loss_kld = -0.5 * torch.mean(temp.mean(-1).mean())
-    return mse_loss, ce_loss, loss_kld, acc
+    return num_mse_loss, ce_loss, loss_kld, acc
 
     parser = argparse.ArgumentParser(description='Variational Autoencoder')
 

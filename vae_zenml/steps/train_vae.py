@@ -153,22 +153,22 @@ def train_evaluate_vae(
             
             optimizer.zero_grad()
             Recon_X_num, Recon_X_cat, mu_z, std_z = model(batch_num, batch_cat)
-            loss_mse, loss_ce, loss_kld, current_batch_train_acc = compute_loss(
+            loss_num_mse, loss_ce, loss_kld, current_batch_train_acc = compute_loss(
                 batch_num, batch_cat, Recon_X_num, Recon_X_cat, mu_z, std_z
             )
             
-            total_loss = loss_mse + loss_ce + beta * loss_kld
+            total_loss = loss_num_mse + loss_ce + beta * loss_kld
             total_loss.backward()
             optimizer.step()
 
             batch_len = batch_num.shape[0]
-            epoch_loss_mse += loss_mse.item() * batch_len
+            epoch_loss_mse += loss_num_mse.item() * batch_len
             epoch_loss_ce += loss_ce.item() * batch_len
             epoch_loss_kld += loss_kld.item() * batch_len
             epoch_train_acc_sum += current_batch_train_acc.item() * batch_len
             processed_samples += batch_len
             pbar.set_postfix({
-                "MSE": loss_mse.item(), "CE": loss_ce.item(), "KL": loss_kld.item(), 
+                "MSE": loss_num_mse.item(), "CE": loss_ce.item(), "KL": loss_kld.item(), 
                 "Beta*KL": (beta * loss_kld).item(), "TrainAcc": current_batch_train_acc.item()
             })
 

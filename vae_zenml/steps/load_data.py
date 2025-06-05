@@ -11,12 +11,12 @@ from utils import get_args
 from pathlib import Path
 import numpy as np
 from vae_syntheas.main import transform_preprocessed_data
-from syntheas_zenml_mgmt.data import get_df_test, get_df_train, get_df_val
+from syntheas_zenml_mgmt.data import get_df_train, get_df_val, get_metadata
 
 
 
 @step
-def load_data_step() -> Tuple[
+def load_data_step(exclude_columns = ['id', 'combined_tks']) -> Tuple[
     Annotated[Tuple[np.ndarray, np.ndarray], "X_num"],
     Annotated[Tuple[np.ndarray, np.ndarray], "X_cat"],
     Annotated[List[int], "categories"],
@@ -26,11 +26,13 @@ def load_data_step() -> Tuple[
     Annotated[Any, "all_columns"],
     Annotated[Any, "column_metadata"],
 ]:
-    df_train = get_df_train()
-    df_train.impact = df_train.impact.astype(int)
-    df_val = get_df_val()
-    df_val.impact = df_val.impact.astype(int)
+    df_train = get_df_train(exclude_columns)
+    # df_train.impact = df_train.impact.astype(int)
+    df_val = get_df_val(exclude_columns)
+    # df_val.impact = df_val.impact.astype(int)
 
-    X_num, X_cat, categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata = transform_preprocessed_data(df_train, df_val, inverse=True)
+    metadata = get_metadata()
+
+    X_num, X_cat, categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata = transform_preprocessed_data(df_train, df_val, metadata, exclude_columns, inverse=True)
 
     return X_num, X_cat, categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata

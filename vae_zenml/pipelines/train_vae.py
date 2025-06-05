@@ -26,7 +26,9 @@ def train_vae_pipeline():
     else:
         args.device = 'cpu'
 
-    X_num, X_cat, categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata = load_data_step()
+    exclude_columns = ['id', 'combined_tks']
+
+    X_num, X_cat, categories, d_numerical, num_inverse, cat_inverse, all_columns, column_metadata = load_data_step(exclude_columns)
 
     # Step 1: Prepare data for PyTorch
     X_train_num_pt, X_train_cat_pt, X_val_num_pt, X_val_cat_pt = prepare_pytorch_data(
